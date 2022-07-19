@@ -1,0 +1,97 @@
+trigger:
+  - main
+
+pool:
+ name: 'IPM-01'
+
+variables:
+  solution: '*/.sln'
+  buildPlatform: 'Any CPU'
+  buildConfiguration: 'Release'
+stages:
+  - stage: Build
+    displayName: Builddotnetcode
+    jobs:
+      - job: Build
+        steps:
+          - task: VSBuild@1
+            inputs:
+             solution: '$(solution)'
+             msbuildArgs: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:PackageLocation="$(build.artifactStagingDirectory)"'
+             platform: '$(buildPlatform)'
+             configuration: '$(buildConfiguration)'
+          - task: PublishBuildArtifacts@1
+            inputs:
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+              ArtifactName: 'yaml'
+              publishLocation: 'Container'
+          - task: DownloadBuildArtifacts@1
+            inputs:
+              buildType: 'current'
+              ArtifactName: 'yaml'
+              downloadType: 'specific'
+              downloadPath: '$(System.ArtifactsDirectory)'
+  - stage: Dev
+    pool:
+     name: IPM-01
+    jobs:
+      - job: Webappdeploy
+        displayName: Webappdeploy
+        steps:
+          - task: DownloadBuildArtifacts@1
+            inputs:
+              buildType: 'current'
+              ArtifactName: 'yaml'
+              downloadType: 'specific'
+              downloadPath: '$(System.ArtifactsDirectory)'
+          - task: AzureRmWebAppDeployment@4
+            inputs:
+              ConnectionType: 'AzureRM'
+              azureSubscription: 'IPM-N'
+              appType: 'webApp'
+              WebAppName: 'Ipm-n'
+              packageForLinux: '$(System.ArtifactsDirectory)'
+  - stage: uat
+    pool:
+     name: IPM-01
+    jobs:
+      - job: Webappdeploy
+        displayName: Webappdeploy
+        steps:
+          - task: DownloadBuildArtifacts@1
+            inputs:
+              buildType: 'current'
+              ArtifactName: 'yaml'
+              downloadType: 'specific'
+              downloadPath: '$(System.ArtifactsDirectory)'
+          - task: AzureRmWebAppDeployment@4
+            inputs:
+              ConnectionType: 'AzureRM'
+              azureSubscription: 'IPM-N'
+              appType: 'webApp'
+              WebAppName: 'Ipm-n'
+              packageForLinux: '$(System.ArtifactsDirectory)'
+  - stage: PROD
+    pool:
+     name: IPM-01
+    jobs:
+      -  deployment: deploywebapptoprod
+         displayName: deploywebapptoprod
+         environment: prod
+         strategy:
+          runOnce:
+             deploy:
+                steps:
+                 - task: DownloadBuildArtifacts@1
+                   inputs:
+                    buildType: 'current'
+                    ArtifactName: 'yaml'
+                    downloadType: 'specific'
+                    downloadPath: '$(System.ArtifactsDirectory)'
+                 - task: AzureRmWebAppDeployment@4
+                   inputs:
+                     ConnectionType: 'AzureRM'
+                     azureSubscription: 'IPM-N'
+                     appType: 'webApp'
+                     WebAppName: 'Ipm-n'
+                     packageForLinux: '$(System.ArtifactsDirectory)/*/.zip'
